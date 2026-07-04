@@ -1,23 +1,81 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 
-// Representa uma notificação personalizada criada pelo usuário.
-// Esse modelo centraliza os dados que serão exibidos, persistidos e agendados.
+/// Modelo de dados que representa uma notificação personalizada.
+/// 
+/// Centraliza todos os dados de uma notificação: conteúdo, visual, som, agendamento.
+/// Fornece métodos para serialização (JSON), cópia com modificações parciais,
+/// e formatação de exibição para interface do usuário.
 class NotifiqModel {
+  // ────────────────────────────────────────────────────────
+  // Identificação e conteúdo
+  // ────────────────────────────────────────────────────────
+  
+  /// Identificador único da notificação (UUID v4).
   final String id;
+  
+  /// Título principal da notificação exibido ao usuário.
   String title;
+  
+  /// Descrição ou corpo detalhado da notificação.
   String body;
-  Color accentColor;
-  String icon;
-  String sound;
-  List<bool> days; // Mantido para compatibilidade com o fluxo anterior.
-  TimeOfDay time;
-  bool active;
-  bool darkTheme;
-  DateTime createdAt;
-  DateTime? scheduledDate; // Data principal para o lembrete.
-  List<TimeOfDay> reminderTimes; // Vários horários por data.
 
+  // ────────────────────────────────────────────────────────
+  // Personalização visual
+  // ────────────────────────────────────────────────────────
+  
+  /// Cor de destaque que aparece na notificação e interface.
+  Color accentColor;
+  
+  /// Emoji ou ícone representativo da notificação.
+  String icon;
+  
+  /// Nome do arquivo de som personalizado para o alerta.
+  String sound;
+
+  // ────────────────────────────────────────────────────────
+  // Agendamento e controle
+  // ────────────────────────────────────────────────────────
+  
+  /// Array de dias da semana (mantido para compatibilidade legada).
+  /// Cada índice representa: [seg, ter, qua, qui, sex, sab, dom].
+  List<bool> days;
+  
+  /// Horário padrão da notificação (HH:MM).
+  TimeOfDay time;
+  
+  /// Indica se a notificação está ativa para agendamento.
+  bool active;
+  
+  /// Preferência de tema escuro para exibição da notificação.
+  bool darkTheme;
+
+  // ────────────────────────────────────────────────────────
+  // Timestamps e datas
+  // ────────────────────────────────────────────────────────
+  
+  /// Data e hora de criação da notificação.
+  DateTime createdAt;
+  
+  /// Data específica quando a notificação deve ser disparada.
+  /// Se null, a notificação não está agendada para uma data específica.
+  DateTime? scheduledDate;
+  
+  /// Lista de múltiplos horários para disparar no mesmo dia.
+  /// Permite criar lembretes em cascata em uma única data.
+  List<TimeOfDay> reminderTimes;
+
+  // ────────────────────────────────────────────────────────
+  // Construtor
+  // ────────────────────────────────────────────────────────
+  
+  /// Cria uma nova instância de NotifiqModel com os parâmetros fornecidos.
+  /// 
+  /// Parâmetros requeridos: id, title, body, accentColor, icon, sound,
+  /// days, time.
+  /// 
+  /// Parâmetros opcionais com valores padrão: active (true), darkTheme (true),
+  /// createdAt (agora), scheduledDate (null), reminderTimes (lista com 'time').
   NotifiqModel({
     required this.id,
     required this.title,
@@ -35,7 +93,14 @@ class NotifiqModel {
   }) : createdAt = createdAt ?? DateTime.now(),
        reminderTimes = reminderTimes ?? [time];
 
-  // Cria uma cópia do modelo com valores substituídos quando necessário.
+  // ────────────────────────────────────────────────────────
+  // Métodos de cópia e transformação
+  // ────────────────────────────────────────────────────────
+
+  /// Cria uma cópia do modelo com campos opcionalmente substituídos.
+  /// 
+  /// Mantém o ID original e substitui apenas os campos fornecidos.
+  /// Útil para atualizações parciais sem criar um novo objeto do zero.
   NotifiqModel copyWith({
     String? title,
     String? body,
@@ -66,7 +131,14 @@ class NotifiqModel {
     );
   }
 
-  // Converte o modelo para um mapa serializável em JSON.
+  // ────────────────────────────────────────────────────────
+  // Serialização para persistência
+  // ────────────────────────────────────────────────────────
+
+  /// Converte o modelo para um mapa que pode ser serializado em JSON.
+  /// 
+  /// Normaliza tipos complexos (Color, TimeOfDay) para tipos primitivos
+  /// compatíveis com JSON (int, String, List).
   Map<String, dynamic> toJson() => {
         'id': id,
         'title': title,
@@ -86,21 +158,27 @@ class NotifiqModel {
             .toList(),
       };
 
-  // Reconstrói um objeto a partir de um mapa JSON persistido.
+  /// Reconstrói uma instância de NotifiqModel a partir de um mapa JSON.
+  /// 
+  /// Inverte a transformação de [toJson()], reconstruindo tipos complexos
+  /// como Color e TimeOfDay a partir de suas representações primitivas.
   factory NotifiqModel.fromJson(Map<String, dynamic> json) => NotifiqModel(
-        id: json['id'],
-        title: json['title'],
-        body: json['body'],
-        accentColor: Color(json['accentColor']),
-        icon: json['icon'],
-        sound: json['sound'],
-        days: List<bool>.from(json['days']),
-        time: TimeOfDay(hour: json['timeHour'], minute: json['timeMinute']),
-        active: json['active'],
-        darkTheme: json['darkTheme'] ?? true,
-        createdAt: DateTime.parse(json['createdAt']),
+        id: json['id'] as String,
+        title: json['title'] as String,
+        body: json['body'] as String,
+        accentColor: Color(json['accentColor'] as int),
+        icon: json['icon'] as String,
+        sound: json['sound'] as String,
+        days: List<bool>.from(json['days'] as List<dynamic>),
+        time: TimeOfDay(
+          hour: json['timeHour'] as int,
+          minute: json['timeMinute'] as int,
+        ),
+        active: json['active'] as bool,
+        darkTheme: json['darkTheme'] as bool? ?? true,
+        createdAt: DateTime.parse(json['createdAt'] as String),
         scheduledDate: json['scheduledDate'] != null
-            ? DateTime.parse(json['scheduledDate'])
+            ? DateTime.parse(json['scheduledDate'] as String)
             : null,
         reminderTimes: (json['reminderTimes'] as List<dynamic>?)
                 ?.map((entry) {
@@ -111,26 +189,45 @@ class NotifiqModel {
                   );
                 })
                 .toList() ??
-            [TimeOfDay(hour: json['timeHour'], minute: json['timeMinute'])],
+            [TimeOfDay(
+              hour: json['timeHour'] as int,
+              minute: json['timeMinute'] as int,
+            )],
       );
 
-  // Serializa o modelo para string para armazenamento local.
+  /// Converte o modelo para uma string JSON compactada.
+  /// 
+  /// Útil para armazenar em SharedPreferences ou base de dados local.
   String toJsonString() => jsonEncode(toJson());
 
-  // Faz a leitura reversa da string persistida.
+  /// Reconstrói o modelo a partir de uma string JSON compactada.
+  /// 
+  /// Inverte a operação de [toJsonString()].
   factory NotifiqModel.fromJsonString(String s) =>
-      NotifiqModel.fromJson(jsonDecode(s));
+      NotifiqModel.fromJson(jsonDecode(s) as Map<String, dynamic>);
 
-  // Gera um texto legível para apresentar a programação da notificação.
+  // ────────────────────────────────────────────────────────
+  // Getters para formatação e exibição
+  // ────────────────────────────────────────────────────────
+
+  /// Gera uma string legível representando a data agendada.
+  /// 
+  /// Formato: DD/MM/YYYY
+  /// Retorna "Sem data" se nenhuma data foi definida.
   String get scheduleLabel {
     if (scheduledDate != null) {
       final date = scheduledDate!;
-      return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
+      return '${date.day.toString().padLeft(2, '0')}/'
+             '${date.month.toString().padLeft(2, '0')}/'
+             '${date.year}';
     }
     return 'Sem data';
   }
 
-  // Formata a hora no padrão HH:MM para exibição visual.
+  /// Formata o primeiro horário em padrão HH:MM.
+  /// 
+  /// Usado para exibição rápida do horário da notificação.
+  /// Retorna "00:00" se nenhum horário foi definido.
   String get timeLabel {
     if (reminderTimes.isEmpty) {
       return '00:00';
@@ -142,6 +239,11 @@ class NotifiqModel {
     return '$h:$m';
   }
 
+  /// Gera um resumo textual dos horários configurados.
+  /// 
+  /// - "00:00" se apenas um horário
+  /// - "N horários" se múltiplos horários
+  /// - "Nenhum horário" se lista vazia
   String get reminderSummary {
     if (reminderTimes.isEmpty) return 'Nenhum horário';
     if (reminderTimes.length == 1) {

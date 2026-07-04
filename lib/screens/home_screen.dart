@@ -6,6 +6,8 @@ import '../widgets/notifiq_preview.dart';
 import 'editor_screen.dart';
 import 'donate_screen.dart';
 
+/// Tela inicial da aplicação que exibe a lista de notificações.
+/// Responsável por carregar, listar, ativar/desativar e deletar notificações.
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
