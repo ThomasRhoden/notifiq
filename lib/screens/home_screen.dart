@@ -14,16 +14,21 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  // Centraliza o acesso ao serviço que salva e agenda notificações.
   final _service = NotificationService();
+  // Armazena a lista atual de notificações carregadas do armazenamento local.
   List<NotifiqModel> _notifications = [];
+  // Indica se os dados ainda estão sendo carregados na abertura da tela.
   bool _loading = true;
 
   @override
   void initState() {
     super.initState();
+    // Carrega as notificações assim que a tela entra em cena.
     _load();
   }
 
+  // Busca os itens salvos e atualiza o estado da interface.
   Future<void> _load() async {
     final list = await _service.loadAll();
     setState(() {
@@ -32,17 +37,20 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
+  // Alterna o estado ativo/inativo de uma notificação e reaplica o agendamento.
   Future<void> _toggleActive(NotifiqModel notif) async {
     final updated = notif.copyWith(active: !notif.active);
     await _service.upsert(updated, _notifications);
     setState(() {});
   }
 
+  // Remove uma notificação da lista e cancela seu agendamento existente.
   Future<void> _delete(NotifiqModel notif) async {
     await _service.delete(notif.id, _notifications);
     setState(() {});
   }
 
+  // Abre a tela de edição e recarrega os dados quando a operação retornar sucesso.
   void _openEditor([NotifiqModel? existing]) async {
     final result = await Navigator.push<bool>(
       context,
@@ -54,6 +62,22 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
     if (result == true) _load();
+  }
+
+  // Monta uma mensagem resumida para o cabeçalho da tela inicial.
+  String get _summaryText {
+    if (_notifications.isEmpty) {
+      return 'Nenhuma notificação criada ainda';
+    }
+
+    final activeCount = _notifications.where((item) => item.active).length;
+    final totalCount = _notifications.length;
+
+    if (activeCount == totalCount) {
+      return '$totalCount notificações ativas e organizadas';
+    }
+
+    return '$activeCount de $totalCount notificações ativas';
   }
 
   @override
@@ -73,7 +97,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text(
-                    'Notifiq 🔔',
+                    'Notifiq',
                     style: TextStyle(
                       color: AppTheme.textPrimary,
                       fontSize: 22,
@@ -82,7 +106,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
                   Text(
-                    'a única notificação que você precisa',
+                    'notificações inteligentes para lembrar no momento certo',
                     style: TextStyle(
                       color: AppTheme.textTertiary,
                       fontSize: 11,
@@ -119,25 +143,76 @@ class _HomeScreenState extends State<HomeScreen> {
               child: _EmptyState(onAdd: () => _openEditor()),
             )
           else
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
-              sliver: SliverList(
-                delegate: SliverChildBuilderDelegate(
-                  (context, i) {
-                    final notif = _notifications[i];
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: _NotifCard(
-                        notif: notif,
-                        onTap: () => _openEditor(notif),
-                        onToggle: () => _toggleActive(notif),
-                        onDelete: () => _delete(notif),
-                      ),
-                    );
-                  },
-                  childCount: _notifications.length,
+            SliverList(
+              delegate: SliverChildListDelegate([
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                  child: Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: AppTheme.surface,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: AppTheme.border, width: 0.5),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 42,
+                          height: 42,
+                          decoration: const BoxDecoration(
+                            color: Color(0xFF5DCAA5),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(Icons.notifications_active_outlined,
+                              color: Colors.black, size: 20),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Painel de lembretes',
+                                style: TextStyle(
+                                  color: AppTheme.textPrimary,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                _summaryText,
+                                style: const TextStyle(
+                                  color: AppTheme.textSecondary,
+                                  fontSize: 12,
+                                  height: 1.35,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
-              ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
+                  child: Column(
+                    children: List.generate(_notifications.length, (i) {
+                      final notif = _notifications[i];
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: _NotifCard(
+                          notif: notif,
+                          onTap: () => _openEditor(notif),
+                          onToggle: () => _toggleActive(notif),
+                          onDelete: () => _delete(notif),
+                        ),
+                      );
+                    }),
+                  ),
+                ),
+              ]),
             ),
         ],
       ),
@@ -148,7 +223,7 @@ class _HomeScreenState extends State<HomeScreen> {
         elevation: 0,
         icon: const Icon(Icons.add),
         label: const Text(
-          'Nova notificação',
+          'Criar lembrete',
           style: TextStyle(fontWeight: FontWeight.w500),
         ),
       ),

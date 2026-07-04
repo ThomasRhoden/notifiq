@@ -5,17 +5,19 @@ import 'theme/app_theme.dart';
 import 'screens/home_screen.dart';
 
 void main() async {
+  // Garante que o ambiente Flutter esteja pronto antes de inicializar recursos nativos.
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Inicializa notificações locais
+  // Inicializa o serviço de notificações locais antes da primeira renderização.
   await NotificationService().init();
 
-  // Status bar transparente
+  // Torna a barra de status visualmente integrada ao design do app.
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
     statusBarColor: Colors.transparent,
     statusBarIconBrightness: Brightness.light,
   ));
 
+  // Sobe a aplicação com o tema e a navegação configurados.
   runApp(const NotifiqApp());
 }
 

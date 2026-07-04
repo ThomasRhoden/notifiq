@@ -27,7 +27,7 @@ class _EditorScreenState extends State<EditorScreen> {
   final _titleCtrl = TextEditingController();
   final _bodyCtrl = TextEditingController();
 
-  // Módulos expandidos
+  // Controla quais blocos do formulário ficam abertos na interface.
   final Map<String, bool> _expanded = {
     'text': true,
     'color': false,
@@ -39,6 +39,8 @@ class _EditorScreenState extends State<EditorScreen> {
   @override
   void initState() {
     super.initState();
+    // Quando a tela é usada para editar, reusa os dados já existentes.
+    // Quando é nova, cria um modelo inicial com valores padrão para guiar o usuário.
     if (widget.existing != null) {
       _notif = widget.existing!.copyWith();
     } else {
@@ -51,6 +53,7 @@ class _EditorScreenState extends State<EditorScreen> {
         sound: 'crystal',
         days: [false, true, true, true, true, true, false],
         time: const TimeOfDay(hour: 8, minute: 0),
+        scheduledDate: DateTime.now(),
       );
     }
     _titleCtrl.text = _notif.title;
@@ -66,22 +69,74 @@ class _EditorScreenState extends State<EditorScreen> {
 
   void _update(NotifiqModel updated) => setState(() => _notif = updated);
 
+  // Salva a notificação após validar se o título foi preenchido.
   Future<void> _save() async {
+    // Bloqueia o salvamento caso o usuário não tenha informado um título útil.
     if (_notif.title.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Adicione um título à notificação')),
       );
       return;
     }
+
+    // Garante que a notificação tenha uma data para ser programada corretamente.
+    if (_notif.scheduledDate == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Selecione uma data para o agendamento')),
+      );
+      return;
+    }
+
+    // Evita salvar uma notificação em uma data já passada.
+    final now = DateTime.now();
+    final selectedDate = DateTime(
+      _notif.scheduledDate!.year,
+      _notif.scheduledDate!.month,
+      _notif.scheduledDate!.day,
+      _notif.time.hour,
+      _notif.time.minute,
+    );
+
+    if (selectedDate.isBefore(now)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Selecione uma data futura para o agendamento')),
+      );
+      return;
+    }
+
+    // Exibe um estado de carregamento curto enquanto a persistência é aplicada.
     setState(() => _saving = true);
     await _service.upsert(_notif, widget.allNotifications);
-    if (mounted) Navigator.pop(context, true);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Notificação salva com sucesso')),
+      );
+      Navigator.pop(context, true);
+    }
   }
 
-  Future<void> _pickTime() async {
+  // Abre o seletor de data para definir quando a notificação deve acontecer.
+  Future<void> _pickDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _notif.scheduledDate ?? DateTime.now(),
+      firstDate: DateTime.now(),
+      lastDate: DateTime.now().add(const Duration(days: 3650)),
+    );
+
+    if (picked != null) {
+      _update(_notif.copyWith(scheduledDate: picked));
+    }
+  }
+
+  // Abre o seletor de hora para ajustar um horário específico da lista.
+  Future<void> _pickTime([int? index]) async {
+    final targetIndex = index ?? 0;
     final t = await showTimePicker(
       context: context,
-      initialTime: _notif.time,
+      initialTime: _notif.reminderTimes.isNotEmpty
+          ? _notif.reminderTimes[targetIndex.clamp(0, _notif.reminderTimes.length - 1)]
+          : _notif.time,
       builder: (context, child) => Theme(
         data: ThemeData.dark().copyWith(
           colorScheme: const ColorScheme.dark(
@@ -92,7 +147,35 @@ class _EditorScreenState extends State<EditorScreen> {
         child: child!,
       ),
     );
-    if (t != null) _update(_notif.copyWith(time: t));
+
+    if (t != null) {
+      final updatedTimes = List<TimeOfDay>.from(_notif.reminderTimes);
+      if (updatedTimes.isEmpty) {
+        updatedTimes.add(t);
+      } else {
+        updatedTimes[targetIndex.clamp(0, updatedTimes.length - 1)] = t;
+      }
+      _update(_notif.copyWith(
+        time: t,
+        reminderTimes: updatedTimes,
+      ));
+    }
+  }
+
+  // Adiciona um novo horário ao mesmo dia selecionado.
+  void _addReminderTime() {
+    final newTime = _notif.reminderTimes.isEmpty
+        ? _notif.time
+        : _notif.reminderTimes.last;
+    final updatedTimes = List<TimeOfDay>.from(_notif.reminderTimes)..add(newTime);
+    _update(_notif.copyWith(reminderTimes: updatedTimes));
+  }
+
+  // Remove um horário adicional, preservando o primeiro para não deixar o fluxo vazio.
+  void _removeReminderTime(int index) {
+    if (_notif.reminderTimes.length <= 1) return;
+    final updatedTimes = List<TimeOfDay>.from(_notif.reminderTimes)..removeAt(index);
+    _update(_notif.copyWith(reminderTimes: updatedTimes));
   }
 
   @override
@@ -210,15 +293,17 @@ class _EditorScreenState extends State<EditorScreen> {
           ),
 
           _Module(
-            icon: Icons.schedule_outlined,
-            title: 'Repetição',
+            icon: Icons.calendar_today_outlined,
+            title: 'Data e horário',
             expanded: _expanded['schedule']!,
             onToggle: () =>
                 setState(() => _expanded['schedule'] = !_expanded['schedule']!),
             child: _ScheduleModule(
               notif: _notif,
-              onDaysChanged: (days) => _update(_notif.copyWith(days: days)),
+              onDateChanged: _pickDate,
               onTimeChanged: _pickTime,
+              onAddReminderTime: _addReminderTime,
+              onRemoveReminderTime: _removeReminderTime,
             ),
           ),
         ],
@@ -589,108 +674,137 @@ class _SoundModule extends StatelessWidget {
 }
 
 // ──────────────────────────────────────────────────────────
-// MÓDULO: REPETIÇÃO
+// MÓDULO: DATA E HORÁRIO
 // ──────────────────────────────────────────────────────────
 class _ScheduleModule extends StatelessWidget {
   final NotifiqModel notif;
-  final ValueChanged<List<bool>> onDaysChanged;
-  final VoidCallback onTimeChanged;
+  final VoidCallback onDateChanged;
+  final Function(int)? onTimeChanged;
+  final VoidCallback onAddReminderTime;
+  final Function(int) onRemoveReminderTime;
 
   const _ScheduleModule({
     required this.notif,
-    required this.onDaysChanged,
+    required this.onDateChanged,
     required this.onTimeChanged,
+    required this.onAddReminderTime,
+    required this.onRemoveReminderTime,
   });
 
   @override
   Widget build(BuildContext context) {
-    final labels = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('Dias da semana',
-            style: TextStyle(
-                color: AppTheme.textTertiary,
-                fontSize: 11,
-                letterSpacing: 0.4)),
-        const SizedBox(height: 10),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: List.generate(7, (i) {
-            final active = notif.days[i];
-            return GestureDetector(
-              onTap: () {
-                final updated = List<bool>.from(notif.days);
-                updated[i] = !updated[i];
-                onDaysChanged(updated);
-              },
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 150),
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: active
-                      ? notif.accentColor
-                      : AppTheme.surfaceHigh,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color:
-                        active ? notif.accentColor : AppTheme.border,
-                    width: 0.5,
-                  ),
-                ),
-                child: Center(
-                  child: Text(
-                    labels[i],
-                    style: TextStyle(
-                      color: active
-                          ? Colors.black
-                          : AppTheme.textSecondary,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ),
-              ),
-            );
-          }),
-        ),
-        const SizedBox(height: 18),
-        const Text('Horário',
+        const Text('Data',
             style: TextStyle(
                 color: AppTheme.textTertiary,
                 fontSize: 11,
                 letterSpacing: 0.4)),
         const SizedBox(height: 10),
         GestureDetector(
-          onTap: onTimeChanged,
+          onTap: onDateChanged,
           child: Container(
-            padding: const EdgeInsets.symmetric(
-                horizontal: 16, vertical: 14),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             decoration: BoxDecoration(
               color: AppTheme.surfaceHigh,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                  color: AppTheme.border, width: 0.5),
+              border: Border.all(color: AppTheme.border, width: 0.5),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  notif.timeLabel,
+                  notif.scheduledDate != null
+                      ? '${notif.scheduledDate!.day.toString().padLeft(2, '0')}/${notif.scheduledDate!.month.toString().padLeft(2, '0')}/${notif.scheduledDate!.year}'
+                      : 'Selecionar data',
                   style: const TextStyle(
                     color: AppTheme.textPrimary,
-                    fontSize: 28,
-                    fontWeight: FontWeight.w300,
-                    letterSpacing: 2,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w500,
                   ),
                 ),
-                const Icon(Icons.edit_outlined,
+                const Icon(Icons.calendar_today_outlined,
                     color: AppTheme.textTertiary, size: 18),
               ],
             ),
+          ),
+        ),
+        const SizedBox(height: 18),
+        const Text('Horários',
+            style: TextStyle(
+                color: AppTheme.textTertiary,
+                fontSize: 11,
+                letterSpacing: 0.4)),
+        const SizedBox(height: 10),
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: AppTheme.surfaceHigh,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppTheme.border, width: 0.5),
+          ),
+          child: Column(
+            children: [
+              ...List.generate(notif.reminderTimes.length, (index) {
+                final time = notif.reminderTimes[index];
+                final timeText = '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: InkWell(
+                          onTap: () => onTimeChanged?.call(index),
+                          borderRadius: BorderRadius.circular(10),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                            decoration: BoxDecoration(
+                              color: AppTheme.bg,
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: AppTheme.border, width: 0.5),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.access_time, color: AppTheme.textSecondary, size: 18),
+                                const SizedBox(width: 10),
+                                Text(
+                                  timeText,
+                                  style: const TextStyle(
+                                    color: AppTheme.textPrimary,
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      if (notif.reminderTimes.length > 1)
+                        IconButton(
+                          onPressed: () => onRemoveReminderTime(index),
+                          icon: const Icon(Icons.remove_circle_outline, color: Color(0xFFE24B4A)),
+                        ),
+                    ],
+                  ),
+                );
+              }),
+              const SizedBox(height: 6),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: onAddReminderTime,
+                  icon: const Icon(Icons.add, size: 18),
+                  label: const Text('Adicionar horário'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: const Color(0xFF5DCAA5),
+                    side: const BorderSide(color: Color(0xFF5DCAA5), width: 0.5),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ],

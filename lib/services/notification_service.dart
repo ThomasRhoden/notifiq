@@ -40,16 +40,28 @@ class NotificationService {
   Future<List<NotifiqModel>> loadAll() async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getStringList(_prefsKey) ?? [];
-    return raw.map((s) => NotifiqModel.fromJsonString(s)).toList()
-      ..sort((a, b) =>
-          a.time.hour * 60 + a.time.minute -
-          (b.time.hour * 60 + b.time.minute));
+
+    final parsed = raw.map((s) => NotifiqModel.fromJsonString(s)).toList();
+
+    // Ordena por data e hora para manter a lista previsível na interface.
+    parsed.sort((a, b) {
+      final dateCompare = (a.scheduledDate ?? DateTime(1970)).compareTo(
+        b.scheduledDate ?? DateTime(1970),
+      );
+      if (dateCompare != 0) return dateCompare;
+      return (a.time.hour * 60 + a.time.minute) -
+          (b.time.hour * 60 + b.time.minute);
+    });
+
+    return parsed;
   }
 
   Future<void> saveAll(List<NotifiqModel> list) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setStringList(
-        _prefsKey, list.map((n) => n.toJsonString()).toList());
+      _prefsKey,
+      list.map((n) => n.toJsonString()).toList(),
+    );
   }
 
   Future<void> upsert(NotifiqModel notif, List<NotifiqModel> all) async {
@@ -59,11 +71,14 @@ class NotificationService {
     } else {
       all.add(notif);
     }
+
+    // Garante que a lista em memória reflita a mudança antes de salvar.
     await saveAll(all);
+
     if (notif.active) {
       await schedule(notif);
     } else {
-      await cancel(notif.id);
+      await cancel(notif.id, notif.reminderTimes);
     }
   }
 
@@ -75,28 +90,32 @@ class NotificationService {
 
   // ──────────────── AGENDAMENTO ────────────────
 
+  // Agenda uma notificação para cada horário definido em uma mesma data.
   Future<void> schedule(NotifiqModel notif) async {
-    await cancel(notif.id);
+    // Remove qualquer agendamento anterior para evitar duplicidade.
+    await cancel(notif.id, notif.reminderTimes);
 
-    final now = tz.TZDateTime.now(tz.local);
-    final days = notif.days;
+    // Se a notificação estiver desativada ou não houver uma data definida,
+    // não faz sentido tentar agendar nada.
+    if (!notif.active || notif.scheduledDate == null) return;
 
-    // Agendamos uma notificação por dia da semana ativo
-    for (int weekday = 0; weekday < 7; weekday++) {
-      if (!days[weekday]) continue;
-
-      // Flutter weekday: 1=Mon...7=Sun; nosso array: 0=Dom
-      final flutterDay = weekday == 0 ? 7 : weekday;
-      final notifId = _idFromString('${notif.id}_$weekday');
-
-      tz.TZDateTime scheduledDate = _nextWeekday(
-        flutterDay,
-        notif.time.hour,
-        notif.time.minute,
+    for (int index = 0; index < notif.reminderTimes.length; index++) {
+      final time = notif.reminderTimes[index];
+      final targetDate = DateTime(
+        notif.scheduledDate!.year,
+        notif.scheduledDate!.month,
+        notif.scheduledDate!.day,
+        time.hour,
+        time.minute,
       );
 
+      final scheduledDate = tz.TZDateTime.from(targetDate, tz.local);
+
+      // Evita agendar uma notificação no passado.
+      if (scheduledDate.isBefore(tz.TZDateTime.now(tz.local))) continue;
+
       await _plugin.zonedSchedule(
-        notifId,
+        _idFromString('${notif.id}_$index'),
         notif.title,
         notif.body,
         scheduledDate,
@@ -104,21 +123,23 @@ class NotificationService {
         androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
         uiLocalNotificationDateInterpretation:
             UILocalNotificationDateInterpretation.absoluteTime,
-        matchDateTimeComponents: DateTimeComponents.dayOfWeekAndTime,
       );
     }
   }
 
-  Future<void> cancel(String id) async {
-    for (int weekday = 0; weekday < 7; weekday++) {
-      await _plugin.cancel(_idFromString('${id}_$weekday'));
+  // Cancela todos os agendamentos associados a uma notificação.
+  Future<void> cancel(String id, [List<TimeOfDay>? reminderTimes]) async {
+    if (reminderTimes == null || reminderTimes.isEmpty) {
+      await _plugin.cancel(_idFromString(id));
+      return;
+    }
+
+    for (int index = 0; index < reminderTimes.length; index++) {
+      await _plugin.cancel(_idFromString('${id}_$index'));
     }
   }
 
   NotificationDetails _buildDetails(NotifiqModel notif) {
-    // Cor Android como int ARGB
-    final colorValue = notif.accentColor.value;
-
     final android = AndroidNotificationDetails(
       'notifiq_channel',
       'Notifiq',

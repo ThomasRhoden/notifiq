@@ -1,0 +1,56 @@
+name: Build iOS
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 'latest'
+          
+      - name: Get Flutter info
+        run: flutter --version
+        
+      - name: Get dependencies
+        run: flutter pub get
+        
+      - name: Build iOS
+        run: flutter build ios --release --no-codesign
+        
+      - name: Create iOS App archive
+        run: |
+          cd build/ios/iphoneos
+          mkdir -p Payload
+          mv Runner.app Payload/
+          zip -r -y ../Runner.ipa Payload/Runner.app
+          cd ../
+          mv Runner.ipa ../../../
+        
+      - name: Upload iOS IPA
+        uses: actions/upload-artifact@v3
+        with:
+          name: ios-ipa
+          path: build/ios/Runner.ipa
+          retention-days: 30
+          
+      - name: Upload Release
+        uses: actions/create-release@v1
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: Release ${{ github.ref }}
+          draft: false
+          prerelease: false

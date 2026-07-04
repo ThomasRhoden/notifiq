@@ -1,7 +1,7 @@
 # Notifiq 🔔
 > A única notificação que você precisa.
 
-App de notificações 100% personalizáveis. Texto livre, cor, ícone, som e repetição — tudo configurável por notificação.
+Notifiq é um projeto de portfólio desenvolvido com Flutter e com foco em personalização de notificações. A proposta é oferecer uma experiência simples, visualmente elegante e com controle de agendamento por data e horário para lembretes e alertas.
 
 ---
 
@@ -12,6 +12,13 @@ App de notificações 100% personalizáveis. Texto livre, cor, ícone, som e rep
 - `timezone` — agendamento com fuso horário correto
 - `uuid` — IDs únicos para cada notificação
 - `url_launcher` — links externos (doações)
+
+## Destaques do projeto
+- Interface moderna e visualmente consistente
+- Criação de notificações personalizadas com texto, cor, ícone e som
+- Agendamento por data e horário específicos
+- Persistência local com SharedPreferences
+- Arquitetura simples e fácil de explicar em portfólio
 
 ---
 
@@ -94,6 +101,7 @@ static const String _projectUrl = 'https://seusite.com.br/projeto';
 - [ ] Marketplace de temas
 - [ ] Sincronização em nuvem (backup)
 - [ ] Widget na tela inicial
+- [ ] Modo recorrente com intervalos personalizados
 
 ---
 

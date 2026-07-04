@@ -1,30 +1,56 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-
-import 'package:notifiq/main.dart';
+import 'package:notifiq/models/notification_model.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  test('exibe a data selecionada no rótulo de agendamento', () {
+    final notif = NotifiqModel(
+      id: 'notif-1',
+      title: 'Reunião',
+      body: 'Lembrete',
+      accentColor: Colors.blue,
+      icon: '📅',
+      sound: 'default',
+      days: [false, false, false, false, false, false, false],
+      time: const TimeOfDay(hour: 8, minute: 30),
+      scheduledDate: DateTime(2026, 7, 3),
+    );
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    expect(notif.scheduleLabel, '03/07/2026');
+  });
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
+  test('retorna um texto padrão quando não há data definida', () {
+    final notif = NotifiqModel(
+      id: 'notif-2',
+      title: 'Estudo',
+      body: 'Lembrete',
+      accentColor: Colors.green,
+      icon: '📚',
+      sound: 'default',
+      days: [false, true, false, false, false, false, false],
+      time: const TimeOfDay(hour: 9, minute: 0),
+    );
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    expect(notif.scheduleLabel, 'Sem data');
+  });
+
+  test('agrupa múltiplos horários em um resumo claro', () {
+    final notif = NotifiqModel(
+      id: 'notif-3',
+      title: 'Treino',
+      body: 'Lembrete',
+      accentColor: Colors.orange,
+      icon: '💪',
+      sound: 'default',
+      days: [false, false, false, false, false, false, false],
+      time: const TimeOfDay(hour: 7, minute: 0),
+      scheduledDate: DateTime(2026, 7, 3),
+      reminderTimes: [
+        const TimeOfDay(hour: 7, minute: 0),
+        const TimeOfDay(hour: 19, minute: 30),
+      ],
+    );
+
+    expect(notif.reminderSummary, '2 horários');
   });
 }

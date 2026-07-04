@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 
+// Representa uma notificação personalizada criada pelo usuário.
+// Esse modelo centraliza os dados que serão exibidos, persistidos e agendados.
 class NotifiqModel {
   final String id;
   String title;
@@ -8,11 +10,13 @@ class NotifiqModel {
   Color accentColor;
   String icon;
   String sound;
-  List<bool> days; // [Dom, Seg, Ter, Qua, Qui, Sex, Sáb]
+  List<bool> days; // Mantido para compatibilidade com o fluxo anterior.
   TimeOfDay time;
   bool active;
   bool darkTheme;
   DateTime createdAt;
+  DateTime? scheduledDate; // Data principal para o lembrete.
+  List<TimeOfDay> reminderTimes; // Vários horários por data.
 
   NotifiqModel({
     required this.id,
@@ -26,8 +30,12 @@ class NotifiqModel {
     this.active = true,
     this.darkTheme = true,
     DateTime? createdAt,
-  }) : createdAt = createdAt ?? DateTime.now();
+    this.scheduledDate,
+    List<TimeOfDay>? reminderTimes,
+  }) : createdAt = createdAt ?? DateTime.now(),
+       reminderTimes = reminderTimes ?? [time];
 
+  // Cria uma cópia do modelo com valores substituídos quando necessário.
   NotifiqModel copyWith({
     String? title,
     String? body,
@@ -38,6 +46,8 @@ class NotifiqModel {
     TimeOfDay? time,
     bool? active,
     bool? darkTheme,
+    DateTime? scheduledDate,
+    List<TimeOfDay>? reminderTimes,
   }) {
     return NotifiqModel(
       id: id,
@@ -51,9 +61,12 @@ class NotifiqModel {
       active: active ?? this.active,
       darkTheme: darkTheme ?? this.darkTheme,
       createdAt: createdAt,
+      scheduledDate: scheduledDate ?? this.scheduledDate,
+      reminderTimes: reminderTimes ?? List.from(this.reminderTimes),
     );
   }
 
+  // Converte o modelo para um mapa serializável em JSON.
   Map<String, dynamic> toJson() => {
         'id': id,
         'title': title,
@@ -67,8 +80,13 @@ class NotifiqModel {
         'active': active,
         'darkTheme': darkTheme,
         'createdAt': createdAt.toIso8601String(),
+        'scheduledDate': scheduledDate?.toIso8601String(),
+        'reminderTimes': reminderTimes
+            .map((timeOfDay) => '${timeOfDay.hour}:${timeOfDay.minute}')
+            .toList(),
       };
 
+  // Reconstrói um objeto a partir de um mapa JSON persistido.
   factory NotifiqModel.fromJson(Map<String, dynamic> json) => NotifiqModel(
         id: json['id'],
         title: json['title'],
@@ -81,32 +99,54 @@ class NotifiqModel {
         active: json['active'],
         darkTheme: json['darkTheme'] ?? true,
         createdAt: DateTime.parse(json['createdAt']),
+        scheduledDate: json['scheduledDate'] != null
+            ? DateTime.parse(json['scheduledDate'])
+            : null,
+        reminderTimes: (json['reminderTimes'] as List<dynamic>?)
+                ?.map((entry) {
+                  final parts = entry.toString().split(':');
+                  return TimeOfDay(
+                    hour: int.parse(parts[0]),
+                    minute: int.parse(parts[1]),
+                  );
+                })
+                .toList() ??
+            [TimeOfDay(hour: json['timeHour'], minute: json['timeMinute'])],
       );
 
+  // Serializa o modelo para string para armazenamento local.
   String toJsonString() => jsonEncode(toJson());
 
+  // Faz a leitura reversa da string persistida.
   factory NotifiqModel.fromJsonString(String s) =>
       NotifiqModel.fromJson(jsonDecode(s));
 
-  // Dias com notificação ativa como string legível
+  // Gera um texto legível para apresentar a programação da notificação.
   String get scheduleLabel {
-    final names = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
-    final active = <String>[];
-    for (int i = 0; i < 7; i++) {
-      if (days[i]) active.add(names[i]);
+    if (scheduledDate != null) {
+      final date = scheduledDate!;
+      return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
     }
-    if (active.length == 7) return 'Todo dia';
-    if (active.length == 5 &&
-        !days[0] &&
-        !days[6]) return 'Dias úteis';
-    if (active.length == 2 && days[0] && days[6]) return 'Fins de semana';
-    if (active.isEmpty) return 'Nenhum dia';
-    return active.join(', ');
+    return 'Sem data';
   }
 
+  // Formata a hora no padrão HH:MM para exibição visual.
   String get timeLabel {
-    final h = time.hour.toString().padLeft(2, '0');
-    final m = time.minute.toString().padLeft(2, '0');
+    if (reminderTimes.isEmpty) {
+      return '00:00';
+    }
+
+    final first = reminderTimes.first;
+    final h = first.hour.toString().padLeft(2, '0');
+    final m = first.minute.toString().padLeft(2, '0');
     return '$h:$m';
+  }
+
+  String get reminderSummary {
+    if (reminderTimes.isEmpty) return 'Nenhum horário';
+    if (reminderTimes.length == 1) {
+      return timeLabel;
+    }
+    return '${reminderTimes.length} horários';
   }
 }
